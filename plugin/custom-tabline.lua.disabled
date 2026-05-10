@@ -1,0 +1,96 @@
+local tab_offset = 1
+
+function _G.MyTabline()
+  local s = ""
+  local current = vim.fn.tabpagenr()
+  local total = vim.fn.tabpagenr("$")
+  local width = vim.o.columns
+
+  local tabs = {}
+  local used_width = 0
+
+  -- Helper to build tab label
+  local function tab_label(i)
+    local winnr = vim.fn.tabpagewinnr(i)
+    local buflist = vim.fn.tabpagebuflist(i)
+    local buf = buflist[winnr]
+    local name = vim.fn.bufname(buf)
+
+    if name == "" then
+      name = "[No Name]"
+    else
+      name = vim.fn.fnamemodify(name, ":t")
+    end
+
+    return " " .. i .. ":" .. name .. " "
+  end
+
+  -- STEP 1: determine how many tabs fit from offset
+  local i = tab_offset
+  while i <= total do
+    local label = tab_label(i)
+    local w = vim.fn.strdisplaywidth(label)
+
+    if used_width + w > width then
+      break
+    end
+
+    table.insert(tabs, { index = i, label = label, width = w })
+    used_width = used_width + w
+    i = i + 1
+  end
+
+  local last_visible = tab_offset + #tabs - 1
+
+  -- STEP 2: adjust offset ONLY if current is outside
+  if current < tab_offset then
+    tab_offset = current
+    return _G.MyTabline() -- recompute
+  elseif current > last_visible then
+    -- snap so current is at RIGHT edge
+    tab_offset = current
+    -- shift left until it fits at right edge
+    local temp_width = 0
+    local j = current
+    while j >= 1 do
+      local label = tab_label(j)
+      local w = vim.fn.strdisplaywidth(label)
+
+      if temp_width + w > width then
+        break
+      end
+
+      temp_width = temp_width + w
+      j = j - 1
+    end
+
+    tab_offset = j + 1
+    return _G.MyTabline()
+  end
+
+  -- STEP 3: render (stable, no shifting)
+  if tab_offset > 1 then
+    s = s .. "◀"
+  end
+
+  for _, tab in ipairs(tabs) do
+    if tab.index == current then
+      s = s .. "%#TabLineSel#"
+    else
+      s = s .. "%#TabLine#"
+    end
+
+    s = s .. "%" .. tab.index .. "T"
+    s = s .. tab.label
+  end
+
+  if last_visible < total then
+    s = s .. "%#TabLine#▶"
+  end
+
+  s = s .. "%#TabLineFill#%T"
+  return s
+end
+
+vim.o.tabline = "%!v:lua.MyTabline()"
+vim.o.showtabline = 2
